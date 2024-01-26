@@ -98,6 +98,7 @@ contract WrappedBackedTokenFactory is Ownable {
         );
         WhitelistController(address(proxy)).transferOwnership(proxyAdminOwner);
         whitelistControllerAggregator.add(address(proxy));
+        whitelistControllerAggregator.setCallerAdmin(address(this), true);
 
         proxyAdmin.transferOwnership(proxyAdminOwner);
         whitelistControllerAggregator.transferOwnership(proxyAdminOwner);
@@ -127,6 +128,7 @@ contract WrappedBackedTokenFactory is Ownable {
 
         WrappedBackedToken(address(proxy)).setWhitelistController(address(whitelistControllerAggregator));
         WrappedBackedToken(address(proxy)).transferOwnership(tokenOwner);
+        whitelistControllerAggregator.setCaller(address(proxy), true);
 
         emit NewWrappedToken(address(proxy));
 

@@ -24,6 +24,7 @@
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "./interfaces/WhitelistControllerInterface.sol";
 
 /**
  * @dev
@@ -31,7 +32,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
  * Whitelist controller contract, which holds information about whitelisted addresses.
  *
  */
-contract WhitelistController is OwnableUpgradeable {
+contract WhitelistController is OwnableUpgradeable, WhitelistControllerInterface {
     mapping(address => bool) public isWhitelisted;
     
     event AddedToWhitelist(address indexed account);

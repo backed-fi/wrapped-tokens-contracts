@@ -9,6 +9,7 @@ describe("WhitelistControllerAggregator", function () {
   let accounts: Signer[];
 
   let owner: SignerWithAddress;
+  let actor: SignerWithAddress;
 
   let aggregator: WhitelistControllerAggregator;
   let defaultController: WhitelistController;
@@ -22,12 +23,15 @@ describe("WhitelistControllerAggregator", function () {
     });
 
     owner = await getSigner(0)
+    actor = await getSigner(1)
 
     const factory = await new WrappedBackedTokenFactory__factory(owner.signer).deploy(
       owner.address
     );
     const aggregatorAddress = await factory.whitelistControllerAggregator();
     aggregator = WhitelistControllerAggregator__factory.connect(aggregatorAddress, owner.signer)
+    await aggregator.setCallerAdmin(owner.address, true)
+    await aggregator.setCaller(owner.address, true);
     defaultController = WhitelistController__factory.connect(await aggregator.controllers(0), owner.signer)
   });
 
@@ -38,6 +42,53 @@ describe("WhitelistControllerAggregator", function () {
   })
 
   describe('methods', () => {
+    describe('#setCallerAdmin', () => {
+      const subject = async (address: string, value: boolean) => {
+        return aggregator.setCallerAdmin(address, value)
+      };
+
+      it('should make given address the admin', async () => {
+        const address = '0x0000000000000000000000000000000000000001';
+        await subject(address, true)
+        expect(await aggregator.isCallerAdmin(address)).to.eq(true)
+      })
+      it('should unmark given address as admin', async () => {
+        const address = '0x0000000000000000000000000000000000000001';
+        await subject(address, true)
+        await subject(address, false)
+        expect(await aggregator.isCallerAdmin(address)).to.eq(false)
+      })
+      it('should revert if called not by owner', async () => {
+        const address = '0x0000000000000000000000000000000000000001';
+        await aggregator.transferOwnership(accounts[1].getAddress())
+        await expect(subject(address, true)).to.be.reverted
+      })
+    })
+    describe('#setCaller', () => {
+      cacheBeforeEach(async () => {
+        await aggregator.setCallerAdmin(owner.address, true)
+      })
+      const subject = async (address: string, value: boolean) => {
+        return aggregator.setCaller(address, value)
+      };
+
+      it('should make given address the caller', async () => {
+        const address = '0x0000000000000000000000000000000000000001';
+        await subject(address, true)
+        expect(await aggregator.isAuthorizedCaller(address)).to.eq(true)
+      })
+      it('should unmark given address as caller', async () => {
+        const address = '0x0000000000000000000000000000000000000001';
+        await subject(address, true)
+        await subject(address, false)
+        expect(await aggregator.isAuthorizedCaller(address)).to.eq(false)
+      })
+      it('should revert if called not by admin', async () => {
+        const address = '0x0000000000000000000000000000000000000001';
+        await aggregator.setCallerAdmin(owner.address, false)
+        await expect(subject(address, true)).to.be.reverted
+      })
+    })
     describe('#add', () => {
       const subject = async (address: string) => {
         return aggregator.add(address)
@@ -84,9 +135,14 @@ describe("WhitelistControllerAggregator", function () {
         return aggregator.isWhitelisted(address)
       };
 
-      it('should return true for whitelisted call when underlying controller has given address whitelisted', async () => {
+      it('should reject for non authorized caller', async () => {
+        await expect(aggregator.connect(actor.signer).isWhitelisted(actor.address)).to.be.rejectedWith("Not authorized")
+      })
+      it('should return true and address of whitelist controller for whitelisted call when underlying controller has given address whitelisted', async () => {
         await subject(owner.address)
-        expect(await aggregator.isWhitelisted(owner.address)).to.eq(true)
+        const result = await aggregator.isWhitelisted.staticCall(owner.address);
+        expect(result.isWhitelisted).to.eq(true)
+        expect(result.whitelistController).to.eq(await defaultController.getAddress())
       })
     })
   })

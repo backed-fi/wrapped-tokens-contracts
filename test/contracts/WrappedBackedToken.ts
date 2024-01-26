@@ -87,6 +87,11 @@ describe("WrappedBackedToken", function () {
         await subject()
         expect(await token.balanceOf(actor.address)).to.eq(amount)
       })
+      it('should emit event about whitelisting match', async () => {
+        const tx = subject();
+        await expect(tx).to.not.emit(token, 'TransferOriginatorAuthorized');
+        await expect(tx).to.emit(token, 'TransferDestinationAuthorized').withArgs(recipient, await controller.getAddress());
+      })
       it('should increase underlying balance of token', async () => {
         await subject()
         expect(await baseToken.balanceOf(token)).to.eq(amount)
@@ -117,6 +122,11 @@ describe("WrappedBackedToken", function () {
         await subject()
         expect(await token.balanceOf(actor.address)).to.eq(initialAmount - amount)
       })
+      it('should not emit events about whitelisting match', async () => {
+        const tx = subject();
+        await expect(tx).to.not.emit(token, 'TransferOriginatorAuthorized');
+        await expect(tx).to.not.emit(token, 'TransferDestinationAuthorized');
+      })
       it('should increase balance of underlying for given user', async () => {
         await subject()
         expect(await baseToken.balanceOf(actor.address)).to.eq(amount)
@@ -125,9 +135,9 @@ describe("WrappedBackedToken", function () {
         await subject()
         expect(await baseToken.balanceOf(token)).to.eq(initialAmount - amount)
       })
-      it('should reject for non whitelisted owner', async () => {
+      it('should not reject for non whitelisted owner', async () => {
         await controller.remove([actor.address]);
-        await expect(subject()).to.be.reverted
+        await expect(subject()).to.not.be.reverted
       })
     })
     describe('#transfer', () => {
@@ -140,12 +150,17 @@ describe("WrappedBackedToken", function () {
         await baseToken.connect(actor.signer).approve(token, amount)
         await token.connect(actor.signer).depositFor(actor.address, amount)
       })
-      const subject = async () => {
-        return token.connect(actor.signer).transfer(recipient, amount)
+      const subject = async (overrideRecipient?: string) => {
+        return token.connect(actor.signer).transfer(overrideRecipient ?? recipient, amount)
       };
 
       it('should allow for whitelisted addresses', async () => {
         await expect(subject()).to.not.be.reverted
+      })
+      it('should emit event about whitelisting match', async () => {
+        const tx = subject();
+        await expect(tx).to.emit(token, 'TransferOriginatorAuthorized').withArgs(actor.address, await controller.getAddress());
+        await expect(tx).to.emit(token, 'TransferDestinationAuthorized').withArgs(recipient, await controller.getAddress());
       })
       it('should reject for non whitelisted sender', async () => {
         await controller.remove([actor.address]);
@@ -158,6 +173,9 @@ describe("WrappedBackedToken", function () {
       it('should reject when contract is paused', async () => {
         await token.pause();
         await expect(subject()).to.be.reverted
+      })
+      it('should revert when recipient address is zero', async () => {
+        await expect(subject(ethers.ZeroAddress)).to.be.reverted
       })
       it('should work if controller is set to zero address', async () => {
         await token.setWhitelistController(ethers.ZeroAddress);

@@ -39,9 +39,13 @@ import "./WhitelistController.sol";
  */
 contract WhitelistControllerAggregator is OwnableUpgradeable {
     address[] public controllers;
+    mapping(address => bool) public isAuthorizedCaller;
+    mapping(address => bool) public isCallerAdmin;
 
     event AddedController(address indexed controller);
     event RemovedController(address indexed controller);
+    event UpdatedCaller(address indexed caller, bool indexed newState);
+    event UpdatedCallerAdmin(address indexed callerAdmin, bool indexed newState);
 
     constructor() {
         _disableInitializers();
@@ -49,6 +53,11 @@ contract WhitelistControllerAggregator is OwnableUpgradeable {
     
     function initialize() external initializer {
         __Ownable_init();
+    }
+
+    modifier onlyAdmin() {
+        require(isCallerAdmin[msg.sender], "Caller is not an admin");
+        _;
     }
 
     /**
@@ -80,16 +89,45 @@ contract WhitelistControllerAggregator is OwnableUpgradeable {
     }
 
     /**
-     * @dev Checks in all registered controllers, whether given address is marked as whitelisted
+     * @dev Change admin state of given address. Callable only by the controller admin
      * 
-     * @param addressToCheck    Address to be checked
+     * @param caller    Address of caller to add or remove
+     * @param value    Whether adding or removing an admin
      */
-    function isWhitelisted(address addressToCheck) external view returns (bool) {
+    function setCaller(address caller, bool value) external onlyAdmin {
+        isAuthorizedCaller[caller] = value;
+        
+        emit UpdatedCaller(caller, value);
+    }
+
+    /**
+     * @dev Change admin state of given address. Callable only by the controller owner
+     * 
+     * @param toSet    Address of admin to add or remove
+     * @param value    Whether adding or removing an admin
+     */
+    function setCallerAdmin(address toSet, bool value) external onlyOwner {
+        isCallerAdmin[toSet] = value;
+        
+        emit UpdatedCallerAdmin(toSet, value);
+    }
+
+    /**
+     * @dev Checks in all registered controllers, whether given address is marked as whitelisted. Callable only by authorized caller (wrapped tokens)
+     * 
+     * @param addressToCheck          Address to be checked
+     * 
+     * @return isWhitelisted          A boolean indicating whether given address is whitelisted
+     * @return whitelistController    Address of controller that whitelisted given address
+     */
+    function isWhitelisted(address addressToCheck) external returns (bool isWhitelisted, address whitelistController) {
+        require(isAuthorizedCaller[msg.sender], "Not authorized");
+
         for (uint i = 0; i < controllers.length; i++) {
-            if (WhitelistController(controllers[i]).isWhitelisted(addressToCheck)) {
-                return true;
+            if (WhitelistControllerInterface(controllers[i]).isWhitelisted(addressToCheck)) {
+                return (true, controllers[i]);
             }
         }
-        return false;
+        return (false, address(0));
     }
 }

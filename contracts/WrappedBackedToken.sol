@@ -45,6 +45,9 @@ contract WrappedBackedToken is ERC20WrapperUpgradeable, ERC20PermitUpgradeable, 
 
     WhitelistControllerAggregator public whitelistControllerAggregator;
 
+    event TransferOriginatorAuthorized (address indexed from, address indexed whitelistedBy);
+    event TransferDestinationAuthorized (address indexed to, address indexed whitelistedBy);
+
     constructor() {
         _disableInitializers();
     }
@@ -100,8 +103,9 @@ contract WrappedBackedToken is ERC20WrapperUpgradeable, ERC20PermitUpgradeable, 
      * BeforeTokenTransfer hook, which is responsible for enforcing rules related to
      * whitelisting, as well as pausing the contract.
      * 
-     * It dissalows any movement to or from non whitelisted address, excluding zero address
-     * in case of mint or redeem.     *
+     * If the whitelistControllerAggregator state variable is set,
+     * tokens can only be minted to an account if that account is whitelisted,
+     * and transfers between accounts are only allowed if both accounts are whitelisted.
      * 
      * @param from     address of tokens sender
      * @param to       address of tokens recipient
@@ -112,17 +116,23 @@ contract WrappedBackedToken is ERC20WrapperUpgradeable, ERC20PermitUpgradeable, 
         whenNotPaused
         override
     {
-        if(address(whitelistControllerAggregator) != address(0)) {
-            if(from != address(0) && !whitelistControllerAggregator.isWhitelisted(from)) {
-                revert NonWhitelistedFromAddress({
-                    from: from
-                });
+        if(address(whitelistControllerAggregator) != address(0) && to != address(0)) {
+            if(from != address(0)) {
+                (bool isFromWhitelisted, address fromWhitelistedVia) = whitelistControllerAggregator.isWhitelisted(from);
+                if(!isFromWhitelisted) {
+                    revert NonWhitelistedFromAddress({
+                        from: from
+                    });
+                }
+                emit TransferOriginatorAuthorized(from, fromWhitelistedVia);
             }
-            if(to != address(0) && !whitelistControllerAggregator.isWhitelisted(to)) {
+            (bool isToWhitelisted, address toWhitelistedVia) = whitelistControllerAggregator.isWhitelisted(to);
+            if(!isToWhitelisted) {
                 revert NonWhitelistedToAddress({
                     to: to
                 });
             }
+            emit TransferDestinationAuthorized(to, toWhitelistedVia);
         }
 
         super._beforeTokenTransfer(from, to, amount);
